@@ -1,0 +1,10 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.env
+.venv/
+backend/taskflow_data.json
+taskflow-screenshot.png
+taskflow-mobile-screenshot.png
+npm-debug.log*
