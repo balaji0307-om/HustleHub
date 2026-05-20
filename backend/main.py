@@ -6,13 +6,21 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import json
 
 
 DATA_FILE = Path(__file__).with_name("taskflow_data.json")
+OPENAPI_URL = "/openapi.json"
 
-app = FastAPI(title="TaskFlow API")
+app = FastAPI(
+    title="TaskFlow API",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,6 +29,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get(OPENAPI_URL, include_in_schema=False)
+def openapi_schema() -> JSONResponse:
+    return JSONResponse(app.openapi())
+
+
+@app.get("/docs", include_in_schema=False)
+def swagger_docs():
+    return get_swagger_ui_html(openapi_url=OPENAPI_URL, title="TaskFlow API - Swagger UI")
+
+
+@app.get("/redoc", include_in_schema=False)
+def redoc_docs():
+    return get_redoc_html(openapi_url=OPENAPI_URL, title="TaskFlow API - ReDoc")
 
 
 class RegisterPayload(BaseModel):
