@@ -12,11 +12,12 @@ from pydantic import BaseModel, Field
 import json
 
 
-DATA_FILE = Path(__file__).with_name("taskflow_data.json")
+DATA_FILE = Path(__file__).with_name("hustlehub_data.json")
+LEGACY_DATA_FILE = Path(__file__).with_name("taskflow_data.json")
 OPENAPI_URL = "/openapi.json"
 
 app = FastAPI(
-    title="TaskFlow API",
+    title="HustleHub API",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -42,12 +43,12 @@ def openapi_schema() -> JSONResponse:
 
 @app.get("/docs", include_in_schema=False)
 def swagger_docs():
-    return get_swagger_ui_html(openapi_url=OPENAPI_URL, title="TaskFlow API - Swagger UI")
+    return get_swagger_ui_html(openapi_url=OPENAPI_URL, title="HustleHub API - Swagger UI")
 
 
 @app.get("/redoc", include_in_schema=False)
 def redoc_docs():
-    return get_redoc_html(openapi_url=OPENAPI_URL, title="TaskFlow API - ReDoc")
+    return get_redoc_html(openapi_url=OPENAPI_URL, title="HustleHub API - ReDoc")
 
 
 class RegisterPayload(BaseModel):
@@ -79,6 +80,8 @@ def now_iso() -> str:
 
 
 def load_db() -> dict[str, Any]:
+    if not DATA_FILE.exists() and LEGACY_DATA_FILE.exists():
+        return json.loads(LEGACY_DATA_FILE.read_text(encoding="utf-8"))
     if not DATA_FILE.exists():
         return {"users": [], "tokens": {}, "tasks": {}}
     return json.loads(DATA_FILE.read_text(encoding="utf-8"))
@@ -141,7 +144,9 @@ def register(payload: RegisterPayload) -> dict[str, Any]:
 def login(payload: LoginPayload) -> dict[str, Any]:
     db = load_db()
     user = next((item for item in db["users"] if item["email"].lower() == payload.email.lower()), None)
-    if not user or user["password_hash"] != hash_password(payload.password):
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found. Please create an account first.")
+    if user["password_hash"] != hash_password(payload.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = str(uuid4())
     db["tokens"][token] = user["id"]

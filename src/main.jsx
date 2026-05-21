@@ -8,11 +8,17 @@ import {
   Edit3,
   GripVertical,
   LogOut,
+  Maximize2,
   Moon,
   Plus,
   Search,
+  ShieldCheck,
   Sun,
+  Timer,
   Trash2,
+  Trophy,
+  Users,
+  Volume2,
   X
 } from "lucide-react";
 import "./styles.css";
@@ -31,10 +37,23 @@ const emptyTask = {
 
 const filters = ["All", "Pending", "Completed", "High", "Today", "This week"];
 const categories = ["Study", "Work", "Personal", "Shopping", "Health"];
+const AUTH_KEY = "hustlehub-auth";
+const THEME_KEY = "hustlehub-theme";
+const focusPresets = [
+  { label: "25 min focus", minutes: 25 },
+  { label: "5 min break", minutes: 5 }
+];
+const studyRooms = [
+  { name: "Placement Prep", members: 8, minutes: 142, score: 96 },
+  { name: "Startup Sprint", members: 5, minutes: 118, score: 88 },
+  { name: "DSA Deep Work", members: 12, minutes: 176, score: 104 }
+];
 
 function getStoredAuth() {
   try {
-    return JSON.parse(localStorage.getItem("taskflow-auth") || "null");
+    const stored = localStorage.getItem(AUTH_KEY) || localStorage.getItem("taskflow-auth");
+    if (stored) localStorage.setItem(AUTH_KEY, stored);
+    return JSON.parse(stored || "null");
   } catch {
     return null;
   }
@@ -73,6 +92,12 @@ function priorityClass(priority) {
   return priority.toLowerCase();
 }
 
+function formatTimer(seconds) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const remaining = (seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remaining}`;
+}
+
 function App() {
   const [auth, setAuth] = useState(getStoredAuth);
   const [tasks, setTasks] = useState([]);
@@ -80,21 +105,44 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
-  const [mode, setMode] = useState(localStorage.getItem("taskflow-theme") || "light");
+  const [mode, setMode] = useState(localStorage.getItem(THEME_KEY) || localStorage.getItem("taskflow-theme") || "light");
   const [authMode, setAuthMode] = useState("login");
   const [credentials, setCredentials] = useState({ name: "", email: "", password: "" });
   const [message, setMessage] = useState("");
   const [draggingId, setDraggingId] = useState(null);
+  const [focusSeconds, setFocusSeconds] = useState(25 * 60);
+  const [customMinutes, setCustomMinutes] = useState(45);
+  const [focusRunning, setFocusRunning] = useState(false);
+  const [focusLabel, setFocusLabel] = useState("25 min focus");
+  const [smartFocus, setSmartFocus] = useState(false);
+  const [activeRoom, setActiveRoom] = useState(studyRooms[0].name);
+  const [ambientSound, setAmbientSound] = useState("Rain");
 
   useEffect(() => {
     document.documentElement.dataset.theme = mode;
-    localStorage.setItem("taskflow-theme", mode);
+    localStorage.setItem(THEME_KEY, mode);
   }, [mode]);
 
   useEffect(() => {
     if (!auth?.token) return;
     fetchTasks();
   }, [auth?.token]);
+
+  useEffect(() => {
+    if (!focusRunning) return;
+    const interval = window.setInterval(() => {
+      setFocusSeconds((current) => {
+        if (current <= 1) {
+          window.clearInterval(interval);
+          setFocusRunning(false);
+          setMessage("Focus session complete. Take a mindful break.");
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [focusRunning]);
 
   useEffect(() => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -142,11 +190,44 @@ function App() {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      localStorage.setItem("taskflow-auth", JSON.stringify(data));
+      localStorage.setItem(AUTH_KEY, JSON.stringify(data));
       setAuth(data);
       setMessage("");
     } catch (error) {
-      setMessage(error.message);
+      setMessage(
+        authMode === "login" && error.message === "Invalid email or password"
+          ? "No saved account found for this login. Create an account or use demo mode."
+          : error.message
+      );
+    }
+  }
+
+  async function continueWithDemo() {
+    const demo = {
+      name: "HustleHub Demo",
+      email: "demo@hustlehub.app",
+      password: "demo123"
+    };
+    try {
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: demo.email, password: demo.password })
+      });
+      localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+      setAuth(data);
+      setMessage("");
+    } catch {
+      try {
+        const data = await api("/auth/register", {
+          method: "POST",
+          body: JSON.stringify(demo)
+        });
+        localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+        setAuth(data);
+        setMessage("");
+      } catch (error) {
+        setMessage(error.message);
+      }
     }
   }
 
@@ -227,6 +308,19 @@ function App() {
     setMessage(result === "granted" ? "Reminders enabled." : "Notifications were not enabled.");
   }
 
+  function startFocus(minutes, label) {
+    setFocusSeconds(minutes * 60);
+    setFocusLabel(label);
+    setFocusRunning(true);
+    setMessage(smartFocus ? "Smart Focus is active. Keep only essential alerts nearby." : "");
+  }
+
+  function resetFocus() {
+    setFocusRunning(false);
+    setFocusSeconds(25 * 60);
+    setFocusLabel("25 min focus");
+  }
+
   const visibleTasks = useMemo(() => {
     return tasks
       .filter((task) => {
@@ -251,12 +345,14 @@ function App() {
     return { completed, pending, total, percentage };
   }, [tasks]);
 
+  const activeRoomData = studyRooms.find((room) => room.name === activeRoom) || studyRooms[0];
+
   if (!auth) {
     return (
       <main className="auth-shell">
         <section className="auth-panel">
           <div>
-            <p className="eyebrow">TaskFlow</p>
+            <p className="eyebrow">HustleHub</p>
             <h1>Plan your day with less friction.</h1>
             <p className="muted">A polished to-do dashboard with accounts, priorities, deadlines, filters, and reminders.</p>
           </div>
@@ -285,6 +381,7 @@ function App() {
             </label>
             {message && <p className="notice">{message}</p>}
             <button className="primary" type="submit">{authMode === "login" ? "Login" : "Create account"}</button>
+            <button className="ghost full-width" type="button" onClick={continueWithDemo}>Try demo workspace</button>
           </form>
         </section>
       </main>
@@ -295,7 +392,7 @@ function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <div>
-          <p className="eyebrow">TaskFlow</p>
+          <p className="eyebrow">HustleHub</p>
           <h1>Today’s work, calmly organized.</h1>
         </div>
         <div className="stat-stack">
@@ -336,6 +433,7 @@ function App() {
               className="icon-button"
               title="Logout"
               onClick={() => {
+                localStorage.removeItem(AUTH_KEY);
                 localStorage.removeItem("taskflow-auth");
                 setAuth(null);
               }}
@@ -405,6 +503,77 @@ function App() {
             ))}
           </div>
         </div>
+
+        <section className={`focus-grid ${smartFocus ? "smart-active" : ""}`}>
+          <article className="focus-card focus-timer">
+            <div className="section-heading">
+              <span><Timer size={18} /> Focus Mode</span>
+              <strong>{focusLabel}</strong>
+            </div>
+            <div className="timer-display">{formatTimer(focusSeconds)}</div>
+            <div className="focus-actions">
+              {focusPresets.map((preset) => (
+                <button key={preset.label} className="ghost" type="button" onClick={() => startFocus(preset.minutes, preset.label)}>
+                  {preset.label}
+                </button>
+              ))}
+              <label className="mini-input">
+                Custom
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={customMinutes}
+                  onChange={(event) => setCustomMinutes(Number(event.target.value) || 1)}
+                />
+              </label>
+              <button className="primary" type="button" onClick={() => startFocus(customMinutes, `${customMinutes} min custom`)}>
+                Start
+              </button>
+              <button className="icon-button" type="button" title="Reset timer" onClick={resetFocus}>
+                <X size={18} />
+              </button>
+            </div>
+          </article>
+
+          <article className="focus-card">
+            <div className="section-heading">
+              <span><Users size={18} /> Group Study</span>
+              <strong>{activeRoomData.members} live</strong>
+            </div>
+            <select value={activeRoom} onChange={(event) => setActiveRoom(event.target.value)}>
+              {studyRooms.map((room) => <option key={room.name}>{room.name}</option>)}
+            </select>
+            <div className="leaderboard">
+              <span><Trophy size={16} /> Room score</span>
+              <strong>{activeRoomData.score}</strong>
+              <span>Shared focus</span>
+              <strong>{activeRoomData.minutes} min</strong>
+            </div>
+            <p className="muted compact">Share a room name with friends and track focus sessions together.</p>
+          </article>
+
+          <article className="focus-card">
+            <div className="section-heading">
+              <span><ShieldCheck size={18} /> Smart Focus</span>
+              <label className="switch">
+                <input type="checkbox" checked={smartFocus} onChange={(event) => setSmartFocus(event.target.checked)} />
+                <span />
+              </label>
+            </div>
+            <div className="smart-list">
+              <span><Maximize2 size={16} /> Fullscreen focus prompt</span>
+              <span><Volume2 size={16} /> Ambient sound: {ambientSound}</span>
+              <span><Bell size={16} /> Calls and priority apps reminder</span>
+            </div>
+            <select value={ambientSound} onChange={(event) => setAmbientSound(event.target.value)}>
+              <option>Rain</option>
+              <option>Library</option>
+              <option>White noise</option>
+              <option>None</option>
+            </select>
+          </article>
+        </section>
 
         {message && <p className="notice">{message}</p>}
 
