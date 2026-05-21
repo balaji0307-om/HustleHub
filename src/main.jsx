@@ -511,12 +511,14 @@ function App() {
               <strong>{focusLabel}</strong>
             </div>
             <div className="timer-display">{formatTimer(focusSeconds)}</div>
-            <div className="focus-actions">
+            <div className="preset-row">
               {focusPresets.map((preset) => (
                 <button key={preset.label} className="ghost" type="button" onClick={() => startFocus(preset.minutes, preset.label)}>
                   {preset.label}
                 </button>
               ))}
+            </div>
+            <div className="focus-actions">
               <label className="mini-input">
                 Custom
                 <input
@@ -534,6 +536,10 @@ function App() {
                 <X size={18} />
               </button>
             </div>
+            <div className="focus-status">
+              <span className={focusRunning ? "live-dot active" : "live-dot"} />
+              {focusRunning ? "Session running" : "Ready for deep work"}
+            </div>
           </article>
 
           <article className="focus-card">
@@ -550,7 +556,11 @@ function App() {
               <span>Shared focus</span>
               <strong>{activeRoomData.minutes} min</strong>
             </div>
-            <p className="muted compact">Share a room name with friends and track focus sessions together.</p>
+            <div className="room-chips">
+              <span>Live timer sync</span>
+              <span>Task sharing</span>
+            </div>
+            <button className="ghost room-button" type="button">Join room</button>
           </article>
 
           <article className="focus-card">
@@ -562,9 +572,9 @@ function App() {
               </label>
             </div>
             <div className="smart-list">
-              <span><Maximize2 size={16} /> Fullscreen focus prompt</span>
-              <span><Volume2 size={16} /> Ambient sound: {ambientSound}</span>
-              <span><Bell size={16} /> Calls and priority apps reminder</span>
+              <span><Maximize2 size={16} /> Fullscreen prompt <strong>{smartFocus ? "On" : "Ready"}</strong></span>
+              <span><Volume2 size={16} /> Ambient sound <strong>{ambientSound}</strong></span>
+              <span><Bell size={16} /> Allowlist <strong>Calls + priority</strong></span>
             </div>
             <select value={ambientSound} onChange={(event) => setAmbientSound(event.target.value)}>
               <option>Rain</option>

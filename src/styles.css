@@ -382,18 +382,18 @@ select:focus {
 
 .focus-grid {
   display: grid;
-  grid-template-columns: 1.15fr 0.9fr 0.95fr;
-  gap: 14px;
+  grid-template-columns: minmax(360px, 1.15fr) minmax(280px, 0.9fr) minmax(300px, 0.95fr);
+  gap: 16px;
   margin-bottom: 20px;
 }
 
 .focus-card {
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
-  padding: 16px;
-  background: var(--panel);
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent), var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -428,14 +428,20 @@ select:focus {
 
 .timer-display {
   font-variant-numeric: tabular-nums;
-  font-size: clamp(2.4rem, 5vw, 4.5rem);
+  font-size: clamp(3rem, 5vw, 5rem);
   font-weight: 900;
   line-height: 1;
 }
 
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .focus-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  grid-template-columns: minmax(130px, 1fr) minmax(110px, 0.8fr) 42px;
   gap: 10px;
   align-items: end;
 }
@@ -450,18 +456,39 @@ select:focus {
 }
 
 .focus-actions .icon-button {
-  justify-self: start;
+  justify-self: end;
 }
 
 .mini-input input {
   min-height: 42px;
 }
 
+.focus-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.live-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 0 5px rgba(47, 138, 95, 0.16);
+}
+
 .leaderboard {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  padding: 12px;
+  padding: 14px;
   background: var(--panel-soft);
   border-radius: 8px;
 }
@@ -470,14 +497,43 @@ select:focus {
   color: var(--text);
 }
 
-.compact {
-  margin: 0;
-  font-size: 0.92rem;
+.room-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.room-chips span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.room-button {
+  width: 100%;
 }
 
 .smart-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+}
+
+.smart-list span {
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.smart-list span:last-child {
+  border-bottom: 0;
+}
+
+.smart-list strong {
+  color: var(--text);
+  font-size: 0.82rem;
 }
 
 .switch {
