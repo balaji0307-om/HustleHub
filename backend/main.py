@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
+from random import randint
 from typing import Any
 from uuid import uuid4
 
@@ -75,16 +76,35 @@ class ReorderPayload(BaseModel):
     task_ids: list[str]
 
 
+class JoinRoomPayload(BaseModel):
+    code: str = Field(pattern=r"^\d{4}$")
+
+
+class ChatAttachment(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    type: str = Field(max_length=120)
+    data: str = Field(min_length=1)
+
+
+class ChatMessagePayload(BaseModel):
+    text: str = Field(default="", max_length=1000)
+    attachment: ChatAttachment | None = None
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def load_db() -> dict[str, Any]:
     if not DATA_FILE.exists() and LEGACY_DATA_FILE.exists():
-        return json.loads(LEGACY_DATA_FILE.read_text(encoding="utf-8"))
+        db = json.loads(LEGACY_DATA_FILE.read_text(encoding="utf-8"))
+        db.setdefault("rooms", {})
+        return db
     if not DATA_FILE.exists():
-        return {"users": [], "tokens": {}, "tasks": {}}
-    return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        return {"users": [], "tokens": {}, "tasks": {}, "rooms": {}}
+    db = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    db.setdefault("rooms", {})
+    return db
 
 
 def save_db(db: dict[str, Any]) -> None:
@@ -107,12 +127,41 @@ def get_current_user(authorization: str | None = Header(default=None)) -> dict[s
     user_id = db["tokens"].get(token)
     user = next((item for item in db["users"] if item["id"] == user_id), None)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid session")
+        raise HTTPException(status_code=401, detail="Ready to begin deep work. Please sign in again.")
     return user
 
 
 def get_user_tasks(db: dict[str, Any], user_id: str) -> list[dict[str, Any]]:
     return sorted(db["tasks"].setdefault(user_id, []), key=lambda task: task["order"])
+
+
+def public_room(room: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "code": room["code"],
+        "members": room["members"],
+        "messages": room["messages"],
+        "created_at": room["created_at"],
+    }
+
+
+def get_room_or_404(db: dict[str, Any], code: str) -> dict[str, Any]:
+    room = db["rooms"].get(code)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    return room
+
+
+def add_member(room: dict[str, Any], user: dict[str, Any]) -> None:
+    if not any(member["id"] == user["id"] for member in room["members"]):
+        room["members"].append(public_user(user))
+
+
+def generate_room_code(db: dict[str, Any]) -> str:
+    for _ in range(100):
+        code = str(randint(1000, 9999))
+        if code not in db["rooms"]:
+            return code
+    raise HTTPException(status_code=503, detail="Could not create a room code. Please try again.")
 
 
 @app.get("/health")
@@ -214,3 +263,56 @@ def reorder_tasks(payload: ReorderPayload, user: dict[str, Any] = Depends(get_cu
     db["tasks"][user["id"]] = sorted(tasks, key=lambda task: task["order"])
     save_db(db)
     return db["tasks"][user["id"]]
+
+
+@app.post("/rooms")
+def create_room(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    db = load_db()
+    code = generate_room_code(db)
+    room = {
+        "code": code,
+        "members": [public_user(user)],
+        "messages": [],
+        "created_at": now_iso(),
+    }
+    db["rooms"][code] = room
+    save_db(db)
+    return public_room(room)
+
+
+@app.post("/rooms/join")
+def join_room(payload: JoinRoomPayload, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    db = load_db()
+    room = get_room_or_404(db, payload.code)
+    add_member(room, user)
+    save_db(db)
+    return public_room(room)
+
+
+@app.get("/rooms/{code}")
+def get_room(code: str, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    db = load_db()
+    room = get_room_or_404(db, code)
+    add_member(room, user)
+    save_db(db)
+    return public_room(room)
+
+
+@app.post("/rooms/{code}/messages")
+def send_room_message(code: str, payload: ChatMessagePayload, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    if not payload.text.strip() and not payload.attachment:
+        raise HTTPException(status_code=422, detail="Write a message or attach a file.")
+    db = load_db()
+    room = get_room_or_404(db, code)
+    add_member(room, user)
+    message = {
+        "id": str(uuid4()),
+        "user": public_user(user),
+        "text": payload.text.strip(),
+        "attachment": payload.attachment.model_dump() if payload.attachment else None,
+        "created_at": now_iso(),
+    }
+    room["messages"].append(message)
+    room["messages"] = room["messages"][-100:]
+    save_db(db)
+    return message

@@ -5,18 +5,22 @@ import {
   CalendarDays,
   Check,
   ClipboardList,
+  Copy,
   Edit3,
+  FileText,
   GripVertical,
+  Image as ImageIcon,
   LogOut,
   Maximize2,
+  MessageCircle,
   Moon,
+  Paperclip,
   Plus,
   Search,
   ShieldCheck,
   Sun,
   Timer,
   Trash2,
-  Trophy,
   Users,
   Volume2,
   X
@@ -43,11 +47,7 @@ const focusPresets = [
   { label: "25 min focus", minutes: 25 },
   { label: "5 min break", minutes: 5 }
 ];
-const studyRooms = [
-  { name: "Placement Prep", members: 8, minutes: 142, score: 96 },
-  { name: "Startup Sprint", members: 5, minutes: 118, score: 88 },
-  { name: "DSA Deep Work", members: 12, minutes: 176, score: 104 }
-];
+const MAX_ATTACHMENT_SIZE = 2 * 1024 * 1024;
 
 function getStoredAuth() {
   try {
@@ -98,6 +98,17 @@ function formatTimer(seconds) {
   return `${minutes}:${remaining}`;
 }
 
+function formatTime(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function cleanErrorMessage(message) {
+  return message === "Invalid session" ? "Ready to begin deep work. Please sign in again." : message;
+}
+
 function App() {
   const [auth, setAuth] = useState(getStoredAuth);
   const [tasks, setTasks] = useState([]);
@@ -115,7 +126,11 @@ function App() {
   const [focusRunning, setFocusRunning] = useState(false);
   const [focusLabel, setFocusLabel] = useState("25 min focus");
   const [smartFocus, setSmartFocus] = useState(false);
-  const [activeRoom, setActiveRoom] = useState(studyRooms[0].name);
+  const [roomMode, setRoomMode] = useState("create");
+  const [roomCodeInput, setRoomCodeInput] = useState("");
+  const [currentRoom, setCurrentRoom] = useState(null);
+  const [chatText, setChatText] = useState("");
+  const [chatFile, setChatFile] = useState(null);
   const [ambientSound, setAmbientSound] = useState("Rain");
 
   useEffect(() => {
@@ -157,6 +172,14 @@ function App() {
     });
   }, [tasks]);
 
+  useEffect(() => {
+    if (!auth?.token || !currentRoom?.code) return;
+    const interval = window.setInterval(() => {
+      refreshRoom(currentRoom.code, false);
+    }, 3500);
+    return () => window.clearInterval(interval);
+  }, [auth?.token, currentRoom?.code]);
+
   async function api(path, options = {}) {
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
@@ -167,7 +190,7 @@ function App() {
       }
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || "Something went wrong");
+    if (!response.ok) throw new Error(cleanErrorMessage(data.detail || "Something went wrong"));
     return data;
   }
 
@@ -321,6 +344,103 @@ function App() {
     setFocusLabel("25 min focus");
   }
 
+  async function refreshRoom(code = currentRoom?.code, showErrors = true) {
+    if (!code) return;
+    try {
+      const room = await api(`/rooms/${code}`);
+      setCurrentRoom(room);
+    } catch (error) {
+      if (showErrors) setMessage(error.message);
+    }
+  }
+
+  async function createStudyRoom() {
+    try {
+      const room = await api("/rooms", { method: "POST" });
+      setCurrentRoom(room);
+      setRoomCodeInput(room.code);
+      setMessage(`Room ${room.code} is ready.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function joinStudyRoom(event) {
+    event.preventDefault();
+    const code = roomCodeInput.trim();
+    if (!/^\d{4}$/.test(code)) {
+      setMessage("Enter a 4 digit room code.");
+      return;
+    }
+    try {
+      const room = await api("/rooms/join", {
+        method: "POST",
+        body: JSON.stringify({ code })
+      });
+      setCurrentRoom(room);
+      setMessage(`Joined room ${room.code}.`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  function readAttachment(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ name: file.name, type: file.type || "application/octet-stream", data: reader.result });
+      reader.onerror = () => reject(new Error("Could not read this file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function sendRoomMessage(event) {
+    event.preventDefault();
+    if (!currentRoom?.code) {
+      setMessage("Start a focus room first.");
+      return;
+    }
+    try {
+      const attachment = chatFile ? await readAttachment(chatFile) : null;
+      const message = await api(`/rooms/${currentRoom.code}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ text: chatText, attachment })
+      });
+      setCurrentRoom((room) => ({ ...room, messages: [...(room?.messages || []), message] }));
+      setChatText("");
+      setChatFile(null);
+      setMessage("");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  function selectChatFile(event) {
+    const file = event.target.files?.[0] || null;
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      setMessage("Files up to 2 MB can be shared in room chat.");
+      return;
+    }
+    setChatFile(file);
+  }
+
+  function openAttachment(attachment) {
+    if (!attachment?.data) return;
+    const link = document.createElement("a");
+    link.href = attachment.data;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.download = attachment.name;
+    link.click();
+  }
+
+  async function copyRoomCode() {
+    if (!currentRoom?.code) return;
+    await navigator.clipboard.writeText(currentRoom.code);
+    setMessage(`Room code ${currentRoom.code} copied.`);
+  }
+
   const visibleTasks = useMemo(() => {
     return tasks
       .filter((task) => {
@@ -345,7 +465,7 @@ function App() {
     return { completed, pending, total, percentage };
   }, [tasks]);
 
-  const activeRoomData = studyRooms.find((room) => room.name === activeRoom) || studyRooms[0];
+  const roomMembers = currentRoom?.members?.length || 0;
 
   if (!auth) {
     return (
@@ -545,22 +665,35 @@ function App() {
           <article className="focus-card">
             <div className="section-heading">
               <span><Users size={18} /> Group Study</span>
-              <strong>{activeRoomData.members} live</strong>
+              <strong>{currentRoom ? `${roomMembers} live` : "No active room"}</strong>
             </div>
-            <select value={activeRoom} onChange={(event) => setActiveRoom(event.target.value)}>
-              {studyRooms.map((room) => <option key={room.name}>{room.name}</option>)}
-            </select>
-            <div className="leaderboard">
-              <span><Trophy size={16} /> Room score</span>
-              <strong>{activeRoomData.score}</strong>
-              <span>Shared focus</span>
-              <strong>{activeRoomData.minutes} min</strong>
+            <div className="room-tabs">
+              <button type="button" className={roomMode === "create" ? "active" : ""} onClick={() => setRoomMode("create")}>Create room</button>
+              <button type="button" className={roomMode === "join" ? "active" : ""} onClick={() => setRoomMode("join")}>Join room</button>
             </div>
-            <div className="room-chips">
-              <span>Live timer sync</span>
-              <span>Task sharing</span>
+            <form className="room-form" onSubmit={joinStudyRoom}>
+              {roomMode === "create" ? (
+                <button className="primary room-button" type="button" onClick={createStudyRoom}>Generate 4 digit code</button>
+              ) : (
+                <>
+                  <input
+                    inputMode="numeric"
+                    maxLength="4"
+                    placeholder="Enter code"
+                    value={roomCodeInput}
+                    onChange={(event) => setRoomCodeInput(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                  />
+                  <button className="primary" type="submit">Join</button>
+                </>
+              )}
+            </form>
+            <div className="room-code-card">
+              <span>{currentRoom ? "Room code" : "Ready to begin deep work"}</span>
+              <strong>{currentRoom?.code || "----"}</strong>
+              <button className="icon-button" type="button" title="Copy room code" onClick={copyRoomCode} disabled={!currentRoom}>
+                <Copy size={16} />
+              </button>
             </div>
-            <button className="ghost room-button" type="button">Join room</button>
           </article>
 
           <article className="focus-card">
@@ -585,7 +718,58 @@ function App() {
           </article>
         </section>
 
+        {currentRoom && (
+          <section className="room-chat">
+            <div className="section-heading">
+              <span><MessageCircle size={18} /> Room chat</span>
+              <strong>{currentRoom.code}</strong>
+            </div>
+            <div className="chat-messages">
+              {currentRoom.messages.length === 0 ? (
+                <div className="chat-empty">Start the conversation for this focus room.</div>
+              ) : (
+                currentRoom.messages.map((item) => (
+                  <article className={item.user.id === auth.user.id ? "chat-message mine" : "chat-message"} key={item.id}>
+                    <div>
+                      <strong>{item.user.name}</strong>
+                      <span>{formatTime(item.created_at)}</span>
+                    </div>
+                    {item.text && <p>{item.text}</p>}
+                    {item.attachment && (
+                      <button className="attachment-link" type="button" onClick={() => openAttachment(item.attachment)}>
+                        {item.attachment.type.startsWith("image/") ? <ImageIcon size={16} /> : <FileText size={16} />}
+                        {item.attachment.name}
+                      </button>
+                    )}
+                  </article>
+                ))
+              )}
+            </div>
+            <form className="chat-form" onSubmit={sendRoomMessage}>
+              <input placeholder="Send a message to everyone in this room" value={chatText} onChange={(event) => setChatText(event.target.value)} />
+              <label className="file-button" title="Attach image, PDF, or document">
+                <Paperclip size={18} />
+                <input
+                  type="file"
+                  accept="image/*,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={selectChatFile}
+                />
+              </label>
+              <button className="primary" type="submit">Send</button>
+            </form>
+            {chatFile && (
+              <div className="selected-file">
+                <span>{chatFile.name}</span>
+                <button className="icon-button" type="button" title="Remove attachment" onClick={() => setChatFile(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
         {message && <p className="notice">{message}</p>}
+
 
         <section className="task-list">
           {visibleTasks.length === 0 ? (
