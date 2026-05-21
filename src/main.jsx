@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Bell,
@@ -132,6 +132,8 @@ function App() {
   const [chatText, setChatText] = useState("");
   const [chatFile, setChatFile] = useState(null);
   const [ambientSound, setAmbientSound] = useState("Rain");
+  const roomChatRef = useRef(null);
+  const chatInputRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = mode;
@@ -344,6 +346,16 @@ function App() {
     setFocusLabel("25 min focus");
   }
 
+  function enterRoom(room, status) {
+    setCurrentRoom(room);
+    setRoomCodeInput(room.code);
+    setMessage(status);
+    window.setTimeout(() => {
+      roomChatRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      chatInputRef.current?.focus();
+    }, 80);
+  }
+
   async function refreshRoom(code = currentRoom?.code, showErrors = true) {
     if (!code) return;
     try {
@@ -357,9 +369,7 @@ function App() {
   async function createStudyRoom() {
     try {
       const room = await api("/rooms", { method: "POST" });
-      setCurrentRoom(room);
-      setRoomCodeInput(room.code);
-      setMessage(`Room ${room.code} is ready.`);
+      enterRoom(room, `Entered room ${room.code}. Share this code with friends.`);
     } catch (error) {
       setMessage(error.message);
     }
@@ -377,8 +387,7 @@ function App() {
         method: "POST",
         body: JSON.stringify({ code })
       });
-      setCurrentRoom(room);
-      setMessage(`Joined room ${room.code}.`);
+      enterRoom(room, `Entered room ${room.code}.`);
     } catch (error) {
       setMessage(error.message);
     }
@@ -673,7 +682,7 @@ function App() {
             </div>
             <form className="room-form" onSubmit={joinStudyRoom}>
               {roomMode === "create" ? (
-                <button className="primary room-button" type="button" onClick={createStudyRoom}>Generate 4 digit code</button>
+                <button className="primary room-button" type="button" onClick={createStudyRoom}>Generate code and enter</button>
               ) : (
                 <>
                   <input
@@ -687,8 +696,8 @@ function App() {
                 </>
               )}
             </form>
-            <div className="room-code-card">
-              <span>{currentRoom ? "Room code" : "Ready to begin deep work"}</span>
+            <div className={currentRoom ? "room-code-card inside" : "room-code-card"}>
+              <span>{currentRoom ? "You are inside this room" : "Ready to begin deep work"}</span>
               <strong>{currentRoom?.code || "----"}</strong>
               <button className="icon-button" type="button" title="Copy room code" onClick={copyRoomCode} disabled={!currentRoom}>
                 <Copy size={16} />
@@ -719,7 +728,7 @@ function App() {
         </section>
 
         {currentRoom && (
-          <section className="room-chat">
+          <section className="room-chat" id="room-chat" ref={roomChatRef}>
             <div className="section-heading">
               <span><MessageCircle size={18} /> Room chat</span>
               <strong>{currentRoom.code}</strong>
@@ -746,7 +755,7 @@ function App() {
               )}
             </div>
             <form className="chat-form" onSubmit={sendRoomMessage}>
-              <input placeholder="Send a message to everyone in this room" value={chatText} onChange={(event) => setChatText(event.target.value)} />
+              <input ref={chatInputRef} placeholder="Send a message to everyone in this room" value={chatText} onChange={(event) => setChatText(event.target.value)} />
               <label className="file-button" title="Attach image, PDF, or document">
                 <Paperclip size={18} />
                 <input

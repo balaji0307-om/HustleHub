@@ -548,6 +548,11 @@ select:focus {
   border-radius: 8px;
 }
 
+.room-code-card.inside {
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 3px rgba(23, 107, 135, 0.12);
+}
+
 .room-code-card span {
   color: var(--muted);
   font-size: 0.82rem;
