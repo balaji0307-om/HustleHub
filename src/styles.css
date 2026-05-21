@@ -435,13 +435,22 @@ select:focus {
 
 .focus-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr)) 110px auto 42px;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
   gap: 10px;
   align-items: end;
 }
 
 .mini-input {
   gap: 5px;
+}
+
+.mini-input,
+.focus-actions .primary {
+  grid-column: span 1;
+}
+
+.focus-actions .icon-button {
+  justify-self: start;
 }
 
 .mini-input input {
