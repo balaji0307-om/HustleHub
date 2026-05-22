@@ -1,31 +1,66 @@
-# HustleHub
+# 🚀 HustleHub
 
-A portfolio-level To-Do app built with React + Vite and FastAPI.
+A portfolio-level productivity and task management platform built with React + Vite and FastAPI.
 
-## Features
+## ✨ Features
 
-- Login and registration
-- Add, edit, delete, complete, and reorder tasks
-- Due date and time
+- User login and registration
+- Add, edit, delete, and reorder tasks
+- Task completion tracking
+- Due date and time management
 - Priority levels and categories
-- Search and filters
-- Dark mode
-- Dashboard stats and progress bar
-- Browser reminder permission for tasks due within 30 minutes
-- Responsive layout for mobile, tablet, and desktop
+- Search and filter functionality
+- Dark mode support
+- Dashboard statistics and progress tracking
+- Browser reminder notifications
+- Responsive UI for mobile, tablet, and desktop
 
-## Run
+---
 
-Start the backend:
+## 🛠 Tech Stack
+
+### Frontend
+- React
+- Vite
+- JavaScript
+- CSS
+
+### Backend
+- FastAPI
+- Python
+
+### Deployment
+- Render
+
+---
+
+## 🚀 Live Demo
+
+https://hustlehub-frontend-8r93.onrender.com
+
+---
+
+## ▶ Run Locally
+
+### Start Backend
 
 ```bash
 uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Start the frontend:
+### Start Frontend
 
 ```bash
 npm run dev
 ```
 
-Then open `http://127.0.0.1:5173`.
+Open:
+```text
+http://127.0.0.1:5173
+```
+
+---
+
+## 📸 Screenshot
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c074622c-1f88-4ebb-83b7-e914ef495818" />
